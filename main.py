@@ -1,83 +1,122 @@
+import models
+from peewee import fn
+from datetime import datetime
+
+
 __winc_id__ = "d7b474e9b3a54d23bca54879a4f1855b"
 __human_name__ = "Betsy Webshop"
 
-import models
-import peewee
-
-db = SqliteDatabase('betsywebshop.db')
-models = product_models(db)
+db = models.SqliteDatabase('betsywebshop.db')
+models = models.product_models(db)
 list(models.items())
 
-def database():
-    user = Table('person', ('id', 'first', 'last'))
-    user_id = Table('note', ('id', 'product_id', 'content', 'timestamp'))
-    Reminder = Table('reminder')
-    models.db.connect()
-    
-    
-def search(term):
-    for product in models.Product.select().where(models.Product.name ** f"%{term}%"):
-            print(product.name)
-   
+def populate_test_database():
+    db.create_tables([models.User, models.Product, models.Tag, models.ProductTag])
 
-def list_user_products(user_id):
-    with models.db:
-        user_id = Table('note', ('id', 'product_id', 'content', 'timestamp'))
     
-    product, created = Product.get_or_create(
-    product_name=product_name,
-    description_name=description_name,
-    defaults={'tv': samsung, 'favorite_color': 'black','price':500})
-    
-    product, created = Product.get_or_create(
-    product_name=product_name,
-    description_name=description_name,
-    defaults={'playstation': sony, 'favorite_color': 'black','price':600})
-    
-    product, created = Product.get_or_create(
-    product_name=product_name,
-    description_name=description_name,
-    defaults={'phone': samsung, 'favorite_color': 'red','price':300})
-    
-    product, created = Product.get_or_create(
-    product_name=product_name,
-    description_name=description_name,
-    defaults={'microwave': samsung, 'favorite_color': 'black','price':100})
-    
-    product, created = Product.get_or_create(
-    product_name=product_name,
-    description_name=description_name,
-    defaults={'musicbox': jbl, 'favorite_color': 'grey','price':250})
+def store_data():
+    models.User.create(
+        user_name='Kevin',
+        first_name='Kevin',
+        last_name='Soetosenojo',
+        address='Rinus michelslaan 2E',
+        postal_code='1061MB',
+        city='Amsterdam',
+        country='The Netherlands',
+        iban='secret')
+
+    models.User.create(
+        user_name='AH',
+        first_name='Albert',
+        last_name='Heijn',
+        address='Osdorp 21',
+        postal_code='1066FX',
+        city='Amsterdam',
+        country='The Netherlands',
+        iban='NVT')
+
+    models.Product.create(
+        product_name='Lays',
+        description='Chips',
+        unit_price=2.49,
+        number_in_stock=1000)
+
+    models.Product.create(
+        product_name='Pindakaas',
+        description='Calve Pindakaas',
+        unit_price=3.89,
+        number_in_stock=1000)
+
+    models.Product.create(
+        product_name='Yoghurt Gums',
+        description='Katja Yoghurt gums snoep',
+        unit_price=1.95,
+        number_in_stock=1000)
+
+    models.Tag.create(tag_text='bed')
+    models.Tag.create(tag_text='fed')
+    models.ProductTag.create(
+        tag='lays',
+        product_name='Lays')
+    models.ProductTag.create(
+        tag='calve',
+        product_name='Pindakaas')
+    models.ProductTag.create(
+        tag='yoghurt gums',
+        product_name='Yoghurt Gums')
+
+
+def search(term):
+    for product in models.Product.select().where(fn.Lower(
+        models.Product.product_name.contains(term.lower()))):
+        print(product.product_name)
         
 def list_products_per_tag(tag_id):
     list_of_products_per_tag = []
-    query = models.Product.select(models.Product).join(models.Tag).join(models.Product).where(models.Product_Tag.id == tag_id)
+    query = models.Product.select().join(models.ProductTag).join(models.Tag).where(models.Tag.tag_text == tag_id)
     print(query)
     for product in query:
-        print(product)
-    
+        print(product.product_name)
     
 def add_product_to_catalog(user_id, product):
-    if request.method == "POST":
-        form = ProductListForm(request.POST)
-        if form.is_valid():
-            pl = form.save(commit=False)
-            pl.update_user = request.user
-            pl.save()
-            return redirect(reverse("productdb:list-product_lists"))
+    new_product = models.Product.create(
+        product_name=product['product_name'],
+        description=product['description'],
+        unit_price=product['unit_price'],
+        number_in_stock=product['number_in_stock'])
+    models.Ownership.create(user_name=user_id, product=new_product)
+    
+def remove_product(user_id, product_id):
+    owner = models.Ownership.get_or_none(
+        models.Ownership.user_name == user_id and
+        models.Ownership.product == product_id)
+    if owner:
+        owner.delete_instance()
+
    
 
 def update_stock(product_id, new_quantity):
-    query = product.update(counter=Stat.counter + 1).where(Stat.url == request.url)
+    query = models.Product.update(
+        number_in_stock=new_quantity).where(
+        models.Product.product_name == product_id)
     query.execute()
 
 
 def purchase_product(product_id, buyer_id, quantity):
-    query = models.Product.select(models.Product).join(models.Tag).join(models.Product).where(models.Product_Tag.id == tag_id)
-    print(query)
-    for product in query:
-        print(product)
+    models.Transaction.create(
+        buyer=buyer_id,
+        product_name=product_id,
+        number_sold=quantity,
+        datetime_sold=datetime.now()
+    )
 
-
-def remove_product(product_id):
-    products.delete().where(Contacts.Name=='product').execute()
+    sold_product = models.Product.get(
+                   models.Product.product_name == product_id)
+    new_quantity = sold_product.number_in_stock - quantity
+    update_stock(product_id, new_quantity)
+    add_product_to_catalog(buyer_id, sold_product)
+    query = (models.Ownership
+             .update(number_owned=models.Ownership.number_owned + quantity)
+             .where(models.Ownership.user_name == buyer_id,
+                    models.Ownership.product_name == product_id))
+    query.execute()
